@@ -1,17 +1,18 @@
 "use client";
 
 import { useMemo, useState } from "react";
-
-const cases = [
-  { slug: "jfk", title: "JFK Assassination", question: "Did Lee Harvey Oswald act alone?", category: "Historical events", status: "Disputed", reviewed: "July 2026", conventional: "The Warren Commission concluded Oswald fired three shots from the Texas School Book Depository and acted alone.", alternative: "Critics argue the timing, witness accounts, and later committee findings leave room for additional involvement.", evidence: "Extensive primary record", tone: "amber" },
-  { slug: "mh370", title: "Malaysia Airlines MH370", question: "What caused the aircraft to disappear?", category: "Missing persons & transport", status: "Unresolved", reviewed: "July 2026", conventional: "Available satellite and debris evidence indicates the aircraft ended its flight in the southern Indian Ocean.", alternative: "Competing scenarios dispute who controlled the aircraft, the motive, and whether the accepted search area is correct.", evidence: "Strong location clues; cause unknown", tone: "red" },
-  { slug: "moon", title: "The Moon Landing", question: "Did Apollo 11 land on the Moon?", category: "Space & UFOs", status: "Explained", reviewed: "June 2026", conventional: "Apollo missions landed astronauts on the Moon, supported by tracking data, samples, photographs, and retroreflectors.", alternative: "Hoax claims point to visual anomalies in photographs and alleged Cold War incentives, but lack equivalent physical evidence.", evidence: "Multiple independent evidence lines", tone: "green" },
-  { slug: "roswell", title: "Roswell", question: "What crashed near Roswell in 1947?", category: "Space & UFOs", status: "Mostly explained", reviewed: "June 2026", conventional: "The debris came from a classified Project Mogul balloon array used to monitor Soviet nuclear tests.", alternative: "Witness testimony and changing official explanations are cited as evidence of non-human material or a deeper cover-up.", evidence: "Documents strong; testimony disputed", tone: "green" },
-  { slug: "dyatlov", title: "Dyatlov Pass", question: "Why did nine hikers leave their tent?", category: "Unexplained phenomena", status: "Mostly explained", reviewed: "May 2026", conventional: "A slab avalanche and extreme conditions plausibly triggered a panicked evacuation and fatal exposure.", alternative: "Unusual injuries and incomplete records have supported theories involving weapons tests, conflict, or unknown forces.", evidence: "Natural mechanism plausible", tone: "green" },
-  { slug: "atlantis", title: "Atlantis", question: "Was Plato describing a real civilization?", category: "Archaeology", status: "Speculative", reviewed: "May 2026", conventional: "Most classicists treat Atlantis as a philosophical story shaped to serve Plato’s argument.", alternative: "Some researchers propose memories of real disasters or civilizations inspired the account.", evidence: "No confirmed archaeological site", tone: "red" },
-];
+import { cases } from "./cases";
 
 const categories = ["All cases", ...Array.from(new Set(cases.map((item) => item.category)))];
+
+const feedPairs = [
+  { name: "ZeroHedge", url: "https://feeds.feedburner.com/zerohedge/feed", beat: "Markets, monetary policy, geopolitics", match: "Federal Reserve, SEC, Treasury, BLS, company filings", matchUrl: "https://www.federalreserve.gov/feeds/press_all.xml" },
+  { name: "The Daily Sheeple", url: "https://thedailysheeple.com", beat: "Preparedness, civil liberties, alternative news", match: "FEMA, DOJ, court records, state and local agencies", matchUrl: "https://www.justice.gov/feeds/pressroom/press-release.xml" },
+  { name: "Waking Times", url: "https://www.wakingtimes.com/feed/", beat: "Holistic health, spirituality, anti-establishment", match: "NIH, FDA, PubMed, Cochrane reviews", matchUrl: "https://www.nih.gov/news-events/news-releases/rss.xml" },
+  { name: "The Vigilant Citizen", url: "https://vigilantcitizen.com/feed/", beat: "Symbolism, pop culture, alleged hidden agendas", match: "Original media, full interviews, credits, filings, scholarship", matchUrl: "https://www.si.edu/rss" },
+  { name: "Before It’s News", url: "https://img.beforeitsnews.com/subscribe/", beat: "Citizen reports and wide-ranging fringe claims", match: "Claim-specific primary records plus BBC or Reuters", matchUrl: "https://feeds.bbci.co.uk/news/world/rss.xml" },
+  { name: "InfoWars", url: "https://www.infowars.com/rss.xml", beat: "Deep-state, political and institutional claims", match: "Federal Register, court dockets, agency records, AP/Reuters", matchUrl: "https://www.federalregister.gov/documents/search.rss" },
+];
 
 export default function Home() {
   const [query, setQuery] = useState("");
@@ -61,7 +62,7 @@ export default function Home() {
             <div className="dossier-meta"><span>Reviewed Jul 2026</span><span>12 min read</span></div>
           </aside>
         </div>
-        <div className="trust-strip"><span><b>06</b> launch case files</span><span><b>64+</b> source links mapped</span><span><b>0</b> conclusions sold as certainty</span><span className="fineprint">Research grows carefully—not automatically.</span></div>
+        <div className="trust-strip"><span><b>06</b> full case files</span><span><b>22</b> cited source records</span><span><b>0</b> conclusions sold as certainty</span><span className="fineprint">Research grows carefully—not automatically.</span></div>
       </header>
 
       <section id="cases" className="section cases-section">
@@ -84,6 +85,14 @@ export default function Home() {
           <article className="position alternative"><div className="position-label"><span>B</span> Alternative account</div><h3>The disputed explanation</h3><p>{selected.alternative}</p><dl><div><dt>Evidence quality</dt><dd>{selected.tone === "red" ? "Very limited" : "Limited"}</dd></div><div><dt>Main weakness</dt><dd>Claims often exceed the available record.</dd></div></dl></article>
         </div>
         <div className="assessment"><div><p className="kicker">Current assessment</p><h3>Two accounts do not mean equal evidence.</h3></div><p>We distinguish what is documented from what is inferred. This summary is a starting point, not a substitute for the linked primary record.</p><a href="#method">See how ratings work →</a></div>
+        <div className="case-depth">
+          <article className="overview-panel"><p className="kicker">What happened</p><p>{selected.overview}</p><div className="confidence"><span>Confidence in assessment</span><strong>{selected.confidence}</strong></div></article>
+          <article className="fact-panel"><div><p className="kicker">What both sides agree on</p><h3>Common ground</h3><ul>{selected.sharedFacts.map((fact) => <li key={fact}>{fact}</li>)}</ul></div><div><p className="kicker">Still unresolved</p><h3>Open questions</h3><ul>{selected.unresolved.map((item) => <li key={item}>{item}</li>)}</ul></div></article>
+          <article className="timeline-panel"><div className="depth-title"><div><p className="kicker">Chronology</p><h3>Case timeline</h3></div><span>{selected.timeline.length} documented points</span></div><div className="timeline-list">{selected.timeline.map((item) => <div className="timeline-item" key={`${item.date}-${item.event}`}><time>{item.date}</time><p>{item.event}</p><span className={item.status.toLowerCase()}>{item.status}</span></div>)}</div></article>
+          <article className="evidence-board"><div className="depth-title"><div><p className="kicker">Evidence board</p><h3>Claims, weight, and counterargument</h3></div><span>Strength is not popularity</span></div><div className="evidence-cards">{selected.evidenceCards.map((card) => <section className="evidence-card" key={card.title}><div className="evidence-card-top"><span>{card.supports}</span><strong>{card.strength}</strong></div><h4>{card.title}</h4><p>{card.detail}</p><div className="counter"><b>Counterpoint</b>{card.counter}</div><div className="source-chips">{card.sourceIds.map((id) => { const source = selected.sources.find((item) => item.id === id); return source ? <a href={source.url} target="_blank" rel="noreferrer" key={id}>{source.publisher} ↗</a> : null; })}</div></section>)}</div></article>
+          <article className="verdict-panel"><div><p className="kicker">Editorial conclusion</p><h3>Current evidence assessment</h3></div><p>{selected.verdict}</p></article>
+          <article className="case-sources"><div className="depth-title"><div><p className="kicker">Reading room</p><h3>Sources used in this file</h3></div><span>Open the record yourself</span></div><ol>{selected.sources.map((source, index) => <li key={source.id}><span>{String(index + 1).padStart(2,"0")}</span><div><a href={source.url} target="_blank" rel="noreferrer">{source.title} ↗</a><p>{source.publisher} • {source.type}</p></div></li>)}</ol></article>
+        </div>
         <div className="poll"><div><p className="kicker">Your view stays on this device</p><h3>Which account best fits the evidence?</h3></div><div className="poll-options">{["Conventional", "Alternative", "Some combination", "Still undecided"].map((item) => <button className={vote === item ? "selected" : ""} onClick={() => recordVote(item)} key={item}>{item}{vote === item && " ✓"}</button>)}</div></div>
       </section>
 
@@ -91,6 +100,12 @@ export default function Home() {
 
       <section id="method" className="section method"><div className="section-heading"><div><p className="kicker">The research standard</p><h2>No mystery machine.<br/>Just a visible method.</h2></div><p>Every topic passes through the same editorial structure so you can audit our reasoning, not merely trust our verdict.</p></div>
         <div className="method-grid">{[["01","State the question","Define the exact claim without loading the language."],["02","Build the source trail","Prioritize primary documents, official reports, and peer-reviewed work."],["03","Steelman both accounts","Present the strongest credible form of each explanation."],["04","Rate the evidence","Separate evidence quality from confidence in the final conclusion."]].map(([n,t,d]) => <div className="method-step" key={n}><span>{n}</span><h3>{t}</h3><p>{d}</p></div>)}</div>
+      </section>
+
+      <section id="signal-desk" className="section signal-desk"><div className="section-heading"><div><p className="kicker">RSS claim discovery</p><h2>One signal.<br/>Then find its match.</h2></div><p>Alternative feeds surface questions that may be overlooked. They enter the research queue as leads—not facts. Every claim must be paired with the strongest available record from the other side.</p></div>
+        <div className="signal-rule"><b>The matching rule</b><span>Alternative claim</span><i>→</i><span>Original record</span><i>→</i><span>Independent confirmation</span><i>→</i><span>Published assessment</span></div>
+        <div className="feed-table"><div className="feed-head"><span>Discovery feed</span><span>Typical beat</span><span>Required match</span></div>{feedPairs.map((feed) => <div className="feed-row" key={feed.name}><a href={feed.url} target="_blank" rel="noreferrer"><strong>{feed.name}</strong><small>Open feed ↗</small></a><p>{feed.beat}</p><a href={feed.matchUrl} target="_blank" rel="noreferrer">{feed.match} <small>Reference feed ↗</small></a></div>)}</div>
+        <div className="signal-notes"><div><strong>We collect</strong><p>Headline, claim, original URL, publication time, named sources, and the exact evidence being asserted.</p></div><div><strong>We do not collect</strong><p>Copied full articles, anonymous claims presented as fact, invented citations, or a conclusion merely because several sites repeated it.</p></div><div><strong>Publication threshold</strong><p>A claim becomes a case update only after it can be traced to a document, data point, direct witness, or clearly labelled absence of evidence.</p></div></div>
       </section>
 
       <section id="sources" className="section source-band"><div><p className="kicker">Source hierarchy</p><h2>Receipts before rhetoric.</h2></div><div className="source-list"><span>Primary documents</span><span>Official investigations</span><span>Academic research</span><span>Reputable journalism</span><span>Alternative sources</span><span>Critical analysis</span></div><p>Facts are paraphrased and linked. Quotes are brief and attributed. Images must be public domain or properly licensed. Corrections are recorded, not quietly buried.</p></section>
