@@ -1,0 +1,10 @@
+# Force all requests in this folder through the Cloudflare proxy
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  RewriteBase /deep-in-the-abyss/
+
+  RewriteCond %{REQUEST_FILENAME} !-f
+  RewriteRule ^ index.php [L,QSA]
+</IfModule>
+
+DirectoryIndex index.php
