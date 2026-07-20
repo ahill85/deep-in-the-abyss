@@ -4,6 +4,7 @@ import handler from "vinext/server/app-router-entry";
 
 interface Env {
   ASSETS: Fetcher;
+  MATCH_REFRESH_SECRET: string;
   DB: D1Database;
   IMAGES: {
     input(stream: ReadableStream): {
@@ -19,17 +20,20 @@ interface ExecutionContext {
   passThroughOnException(): void;
 }
 
-// Image security config. SVG sources with .svg extension auto-skip the
-// optimization endpoint on the client side (served directly, no proxy).
-// To route SVGs through the optimizer (with security headers), set
-// dangerouslyAllowSVG: true in next.config.js and uncomment below:
-// const imageConfig: ImageConfig = { dangerouslyAllowSVG: true };
+const BASE_PATH = "/deep-in-the-abyss";
+const MATCHES_URL = `https://deep-in-the-abyss.adhill6.workers.dev${BASE_PATH}/api/matches?v=daily`;
+
+async function refreshDailyMatches(env: Env) {
+  await fetch(MATCHES_URL, {
+    headers: { "x-match-refresh": env.MATCH_REFRESH_SECRET || "dia-daily-refresh-v1" },
+  });
+}
 
 const worker = {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
 
-    if (url.pathname === "/_vinext/image") {
+    if (url.pathname === "/_vinext/image" || url.pathname === `${BASE_PATH}/_vinext/image`) {
       const allowedWidths = [...DEFAULT_DEVICE_SIZES, ...DEFAULT_IMAGE_SIZES];
       return handleImageOptimization(request, {
         fetchAsset: (path) => env.ASSETS.fetch(new Request(new URL(path, request.url))),
@@ -40,7 +44,24 @@ const worker = {
       }, allowedWidths);
     }
 
+    // Strip basePath so /deep-in-the-abyss/assets/foo.css → /assets/foo.css
+    if (
+      env.ASSETS &&
+      url.pathname.startsWith(`${BASE_PATH}/`) &&
+      /\.(css|js|mjs|map|png|jpe?g|gif|webp|svg|ico|woff2?|ttf|otf|txt|xml|webmanifest|json)$/i.test(url.pathname)
+    ) {
+      const stripped = new URL(request.url);
+      stripped.pathname = url.pathname.slice(BASE_PATH.length) || "/";
+      const asset = await env.ASSETS.fetch(stripped);
+      if (asset.status !== 404) return asset;
+    }
+
     return handler.fetch(request, env, ctx);
+  },
+
+  // Once a day — crawl feeds and refresh the cache. Visitors never trigger this.
+  async scheduled(_controller: unknown, env: Env, ctx: ExecutionContext) {
+    ctx.waitUntil(refreshDailyMatches(env));
   },
 };
 

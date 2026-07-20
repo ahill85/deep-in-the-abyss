@@ -2,19 +2,56 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { cases } from "../../cases";
+import { SiteFooter } from "../../components/SiteFooter";
+import { absoluteUrl } from "../../site";
 
 export function generateStaticParams() { return cases.map((item) => ({ slug: item.slug })); }
 
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
-  const { slug } = await params; const item = cases.find((entry) => entry.slug === slug);
-  return item ? { title: `${item.title} | Deep in the Abyss`, description: item.question } : {};
+  const { slug } = await params;
+  const item = cases.find((entry) => entry.slug === slug);
+  if (!item) return {};
+  const description = `${item.question} Compare the competing accounts, timeline, and linked sources.`;
+  const url = absoluteUrl(`/cases/${item.slug}`);
+  return {
+    title: item.title,
+    description,
+    keywords: [item.title, item.category, "conspiracy", "evidence", "Deep in the Abyss"],
+    alternates: { canonical: url },
+    openGraph: {
+      type: "article",
+      url,
+      title: `${item.title} | Deep in the Abyss`,
+      description: item.question,
+      images: [{ url: absoluteUrl("/og-1200.png"), width: 1200, height: 630, alt: item.title }],
+    },
+    twitter: {
+      card: "summary_large_image",
+      title: `${item.title} | Deep in the Abyss`,
+      description: item.question,
+      images: [absoluteUrl("/og-1200.png")],
+    },
+  };
 }
 
 export default async function CasePage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params; const item = cases.find((entry) => entry.slug === slug); if (!item) notFound();
   const currentIndex = cases.findIndex((entry) => entry.slug === item.slug); const next = cases[(currentIndex + 1) % cases.length];
   const chapterCount = item.story.length;
+  const articleLd = {
+    "@context": "https://schema.org",
+    "@type": "Article",
+    headline: item.title,
+    description: item.question,
+    dateModified: item.reviewed,
+    author: { "@type": "Organization", name: "Astar Media" },
+    publisher: { "@type": "Organization", name: "Astar Media", url: "https://astarmedia.net" },
+    mainEntityOfPage: absoluteUrl(`/cases/${item.slug}`),
+    image: absoluteUrl("/og-1200.png"),
+    articleSection: item.category,
+  };
   return <main className="case-page">
+    <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(articleLd) }} />
     <nav className="site-nav"><Link className="logo" href="/"><b>D/A</b><span>DEEP IN THE ABYSS<small>They say · the record says</small></span></Link><div><Link href="/archive">All cases</Link><Link href="/#matcher">Live matches</Link></div></nav>
 
     <header className="case-hero">
@@ -83,10 +120,9 @@ export default async function CasePage({ params }: { params: Promise<{ slug: str
         </li>)}</ol>
       </section>
 
-      <aside className="ad-slot">ADVERTISEMENT · ca-pub-9167552007992876</aside>
       <Link className="next-case" href={`/cases/${next.slug}`}><small>NEXT FILE</small><span>{next.title}</span><em>{next.question} →</em></Link>
     </article>
 
-    <footer><Link className="logo" href="/"><b>D/A</b><span>DEEP IN THE ABYSS</span></Link><p>Read both accounts. Open the sources. You decide.</p><span>© 2026</span></footer>
+    <SiteFooter />
   </main>;
 }
