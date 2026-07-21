@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { cases } from "./cases";
 import { topics } from "./archive/topics";
 import { SiteFooter } from "./components/SiteFooter";
+import { ThemeToggle } from "./components/ThemeToggle";
 import { SITE } from "./site";
 
 type Story = { title: string; url: string; date: string; description: string; source: string };
@@ -45,7 +46,7 @@ export default function Home() {
     : null;
 
   return <main>
-    <nav className="site-nav"><Link className="logo" href="/"><b>D/A</b><span>DEEP IN THE ABYSS<small>They say · the record says</small></span></Link><div><a href="#matcher">Latest matches</a><Link href="/archive">Archive</Link></div></nav>
+    <nav className="site-nav"><Link className="logo" href="/"><b>D/A</b><span>DEEP IN THE ABYSS<small>They say · the record says</small></span></Link><div><a href="#matcher">Latest matches</a><Link href="/archive">Archive</Link><ThemeToggle /></div></nav>
 
     <header className="tool-hero">
       <p className="label">One simple idea</p>

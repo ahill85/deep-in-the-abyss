@@ -5,6 +5,7 @@ import { topics, topicSlug } from "../topics";
 import { details } from "../details";
 import { cases } from "../../cases";
 import { SiteFooter } from "../../components/SiteFooter";
+import { ThemeToggle } from "../../components/ThemeToggle";
 import { absoluteUrl } from "../../site";
 
 export function generateStaticParams() { return topics.map((topic) => ({ slug: topicSlug(topic.title) })); }
@@ -49,7 +50,7 @@ export default async function TopicPage({ params }: { params: Promise<{ slug: st
   };
   return <main className="case-page">
     <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(articleLd) }} />
-    <nav className="site-nav"><Link className="logo" href="/"><b>D/A</b><span>DEEP IN THE ABYSS<small>They say · the record says</small></span></Link><div><Link href="/archive">All subjects</Link><Link href="/#matcher">Live matches</Link></div></nav>
+    <nav className="site-nav"><Link className="logo" href="/"><b>D/A</b><span>DEEP IN THE ABYSS<small>They say · the record says</small></span></Link><div><Link href="/archive">All subjects</Link><Link href="/#matcher">Live matches</Link><ThemeToggle /></div></nav>
 
     <header className="case-hero">
       <div className="breadcrumbs"><Link href="/">Home</Link><span>/</span><Link href="/archive">Archive</Link><span>/</span><span>Subject {String(index + 1).padStart(3, "0")}</span></div>

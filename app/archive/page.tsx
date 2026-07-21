@@ -3,6 +3,7 @@ import Link from "next/link";
 import { topics, topicSlug } from "./topics";
 import { cases } from "../cases";
 import { SiteFooter } from "../components/SiteFooter";
+import { ThemeToggle } from "../components/ThemeToggle";
 import { absoluteUrl } from "../site";
 
 export const metadata: Metadata = {
@@ -26,7 +27,7 @@ export const metadata: Metadata = {
 
 export default function Archive() {
   return <main>
-    <nav className="site-nav"><Link className="logo" href="/"><b>D/A</b><span>DEEP IN THE ABYSS<small>They say · the record says</small></span></Link><div><Link href="/">Live matches</Link></div></nav>
+    <nav className="site-nav"><Link className="logo" href="/"><b>D/A</b><span>DEEP IN THE ABYSS<small>They say · the record says</small></span></Link><div><Link href="/">Live matches</Link><ThemeToggle /></div></nav>
     <header className="archive-hero">
       <p className="label">The archive</p>
       <h1>{topics.length} rabbit holes.<br />Both accounts, every time.</h1>

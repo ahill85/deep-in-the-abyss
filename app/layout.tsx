@@ -1,5 +1,4 @@
 import type { Metadata, Viewport } from "next";
-import Script from "next/script";
 import { SITE, absoluteUrl, siteUrl } from "./site";
 import "./globals.css";
 
@@ -8,7 +7,7 @@ export const viewport: Viewport = {
     { media: "(prefers-color-scheme: dark)", color: SITE.themeColor },
     { media: "(prefers-color-scheme: light)", color: SITE.themeColor },
   ],
-  colorScheme: "dark",
+  colorScheme: "light",
   width: "device-width",
   initialScale: 1,
 };
@@ -112,18 +111,25 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
   };
 
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
+      <head>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(function(){try{var t=localStorage.getItem("theme");if(t==="light"||t==="dark")document.documentElement.dataset.theme=t;}catch(e){}})();`,
+          }}
+        />
+      </head>
       <body>
         {children}
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData) }}
         />
-        <Script
+        {/* Plain script like Hoops/HeatCheck — next/script + Brave Shields blanks this React app. */}
+        <script
           async
-          strategy="afterInteractive"
-          crossOrigin="anonymous"
           src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-9167552007992876"
+          crossOrigin="anonymous"
         />
       </body>
     </html>
