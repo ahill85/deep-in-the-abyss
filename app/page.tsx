@@ -9,17 +9,34 @@ import { SITE } from "./site";
 
 type Story = { title: string; url: string; date: string; description: string; source: string };
 type Match = { left: Story; right: Story; score: number; shared?: string[] };
-type MatchData = { updatedAt: string; alternativeSources: number; recordSources: number; matches: Match[]; error?: string };
+type MatchRange = "today" | "week" | "month";
+type MatchData = {
+  updatedAt: string;
+  alternativeSources: number;
+  recordSources: number;
+  matches: Match[];
+  range?: MatchRange;
+  snapshotCount?: number;
+  error?: string;
+};
+
+const RANGES: { id: MatchRange; label: string }[] = [
+  { id: "today", label: "Today" },
+  { id: "week", label: "This week" },
+  { id: "month", label: "This month" },
+];
 
 export default function Home() {
+  const [range, setRange] = useState<MatchRange>("today");
   const [data, setData] = useState<MatchData | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let cancelled = false;
+    setLoading(true);
     (async () => {
       try {
-        const response = await fetch(`${SITE.basePath}/api/matches?v=daily`, { cache: "no-store" });
+        const response = await fetch(`${SITE.basePath}/api/matches?v=daily&range=${range}`, { cache: "no-store" });
         const json = (await response.json()) as MatchData;
         if (!cancelled) setData(json);
       } catch {
@@ -39,11 +56,20 @@ export default function Home() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [range]);
 
   const updatedLabel = data?.updatedAt
     ? new Date(data.updatedAt).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })
     : null;
+
+  const rangeMeta =
+    range === "today"
+      ? updatedLabel
+        ? `Updated ${updatedLabel}`
+        : null
+      : data?.snapshotCount
+        ? `From ${data.snapshotCount} daily snapshot${data.snapshotCount === 1 ? "" : "s"}`
+        : "Building history…";
 
   return <main>
     <nav className="site-nav"><Link className="logo" href="/"><b>D/A</b><span>DEEP IN THE ABYSS<small>They say · the record says</small></span></Link><div><a href="#matcher">Latest matches</a><Link href="/archive">Archive</Link><ThemeToggle /></div></nav>
@@ -55,15 +81,57 @@ export default function Home() {
     </header>
 
     <section id="matcher" className="matcher">
-      <div className="matcher-controls"><div><span>DAILY SNAPSHOT</span><b>{data?.alternativeSources ?? 10} theory feeds</b><i>against</i><b>{data?.recordSources ?? 18} record feeds</b></div>{updatedLabel && <span className="match-updated">Updated {updatedLabel}</span>}</div>
+      <div className="matcher-controls">
+        <div>
+          <span>DAILY SNAPSHOT</span>
+          <b>{data?.alternativeSources ?? 10} theory feeds</b>
+          <i>against</i>
+          <b>{data?.recordSources ?? 18} record feeds</b>
+        </div>
+        {rangeMeta && <span className="match-updated">{rangeMeta}</span>}
+      </div>
+      <div className="match-ranges" role="tablist" aria-label="Match time range">
+        {RANGES.map((item) => (
+          <button
+            key={item.id}
+            type="button"
+            role="tab"
+            aria-selected={range === item.id}
+            className={range === item.id ? "is-active" : undefined}
+            onClick={() => setRange(item.id)}
+          >
+            {item.label}
+          </button>
+        ))}
+        {data && !data.error && !loading && (
+          <span className="match-count">{data.matches.length} match{data.matches.length === 1 ? "" : "es"}</span>
+        )}
+      </div>
       <div className="honesty"><b>Filter rule:</b> no strong match, no card. Feeds are crawled once a day — visitors only read the cached snapshot.</div>
-      {!data && loading && <div className="empty-tool"><span>↳</span><h2>Loading today’s matches…</h2><p>Unmatched headlines will be thrown away.</p></div>}
-      {data?.error && <div className="error-tool">{data.error}</div>}
-      {data && !data.error && <div className="results">{data.matches.length ? data.matches.map((match, index) => <article className="story-pair" key={`${match.left.url}-${index}`}>
-        <a className="side-theory" href={match.left.url} target="_blank" rel="noreferrer"><small>◭ {match.left.source} · THEY SAY</small><h3>{match.left.title}</h3><p>{match.left.description}</p><b>Read the claim ↗</b></a>
-        <a className="side-record" href={match.right.url} target="_blank" rel="noreferrer"><small>◉ {match.right.source} · THE RECORD</small><h3>{match.right.title}</h3><p>{match.right.description}</p><b>Read the response ↗</b></a>
-        <div className="match-score"><strong>↔</strong><span>matched event</span>{match.shared?.length ? <p className="match-shared">Shared: {match.shared.join(" · ")}</p> : null}</div>
-      </article>) : <div className="empty-tool"><h2>No strong cross-bucket matches right now.</h2><p>That is a valid result. The site will not manufacture a comparison.</p></div>}</div>}
+      {loading && <div className="empty-tool"><span>↳</span><h2>Loading matches…</h2><p>Unmatched headlines will be thrown away.</p></div>}
+      {!loading && data?.error && <div className="error-tool">{data.error}</div>}
+      {!loading && data && !data.error && <div className="results">{data.matches.length ? data.matches.map((match, index) => (
+        <article className="story-pair" key={`${match.left.url}-${match.right.url}-${index}`}>
+          {match.shared?.length ? (
+            <p className="match-shared">Shared: {match.shared.join(" · ")}</p>
+          ) : (
+            <p className="match-shared match-shared-empty">Matched event</p>
+          )}
+          <a className="side-theory" href={match.left.url} target="_blank" rel="noreferrer">
+            <small>◭ {match.left.source} · THEY SAY</small>
+            <h3>{match.left.title}</h3>
+            <p>{match.left.description}</p>
+            <b>Read the claim ↗</b>
+          </a>
+          <a className="side-record" href={match.right.url} target="_blank" rel="noreferrer">
+            <small>◉ {match.right.source} · THE RECORD</small>
+            <h3>{match.right.title}</h3>
+            <p>{match.right.description}</p>
+            <b>Read the response ↗</b>
+          </a>
+          <div className="match-score"><strong>↔</strong><span>matched event</span></div>
+        </article>
+      )) : <div className="empty-tool"><h2>No strong cross-bucket matches for this range.</h2><p>That is a valid result. Week and month fill in as daily snapshots accumulate.</p></div>}</div>}
     </section>
 
     <section id="cases" className="mini-cases">
