@@ -8,7 +8,7 @@ import { ThemeToggle } from "./components/ThemeToggle";
 import { SITE } from "./site";
 
 type Story = { title: string; url: string; date: string; description: string; source: string };
-type Match = { left: Story; right: Story; score: number };
+type Match = { left: Story; right: Story; score: number; shared?: string[] };
 type MatchData = { updatedAt: string; alternativeSources: number; recordSources: number; matches: Match[]; error?: string };
 
 export default function Home() {
@@ -62,7 +62,7 @@ export default function Home() {
       {data && !data.error && <div className="results">{data.matches.length ? data.matches.map((match, index) => <article className="story-pair" key={`${match.left.url}-${index}`}>
         <a className="side-theory" href={match.left.url} target="_blank" rel="noreferrer"><small>◭ {match.left.source} · THEY SAY</small><h3>{match.left.title}</h3><p>{match.left.description}</p><b>Read the claim ↗</b></a>
         <a className="side-record" href={match.right.url} target="_blank" rel="noreferrer"><small>◉ {match.right.source} · THE RECORD</small><h3>{match.right.title}</h3><p>{match.right.description}</p><b>Read the response ↗</b></a>
-        <div className="match-score"><strong>↔</strong><span>matched event</span></div>
+        <div className="match-score"><strong>↔</strong><span>matched event</span>{match.shared?.length ? <p className="match-shared">Shared: {match.shared.join(" · ")}</p> : null}</div>
       </article>) : <div className="empty-tool"><h2>No strong cross-bucket matches right now.</h2><p>That is a valid result. The site will not manufacture a comparison.</p></div>}</div>}
     </section>
 

@@ -43,6 +43,7 @@ export function ThemeToggle() {
     <button
       type="button"
       className="theme-toggle"
+      onMouseDown={(event) => event.preventDefault()}
       onClick={toggle}
       aria-label={theme === "light" ? "Switch to dark mode" : "Switch to light mode"}
     >

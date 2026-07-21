@@ -4,7 +4,7 @@ export type MatchPayload = {
   updatedAt: string;
   alternativeSources: number;
   recordSources: number;
-  matches: { left: Story; right: Story; score: number }[];
+  matches: { left: Story; right: Story; score: number; shared: string[] }[];
 };
 
 // Theory-side feeds — every URL verified live July 2026, all free
@@ -32,26 +32,52 @@ const recordFeeds: Feed[] = [
   { name: "NIH", url: "https://www.nih.gov/news-events/news-releases/rss.xml", lane: "health" },
   { name: "FDA", url: "https://www.fda.gov/about-fda/contact-fda/stay-informed/rss-feeds/press-releases/rss.xml", lane: "health" },
   { name: "NASA", url: "https://www.nasa.gov/news-release/feed/", lane: "science" },
-  { name: "Space.com", url: "https://www.space.com/feeds/all", lane: "ufo" },
-  { name: "Live Science", url: "https://www.livescience.com/feeds/all", lane: "paranormal" },
+  { name: "Space.com", url: "https://www.space.com/feeds/all", lane: "science" },
+  { name: "Live Science", url: "https://www.livescience.com/feeds/all", lane: "science" },
   { name: "Skeptical Inquirer", url: "https://skepticalinquirer.org/feed/", lane: "paranormal" },
-  { name: "ScienceDaily", url: "https://www.sciencedaily.com/rss/all.xml", lane: "archaeology" },
-  { name: "Smithsonian Magazine", url: "https://www.smithsonianmag.com/rss/latest_articles/", lane: "archaeology" },
+  { name: "ScienceDaily", url: "https://www.sciencedaily.com/rss/all.xml", lane: "science" },
+  { name: "Smithsonian Magazine", url: "https://www.smithsonianmag.com/rss/latest_articles/", lane: "culture" },
   { name: "BBC World", url: "https://feeds.bbci.co.uk/news/world/rss.xml", lane: "general" },
   { name: "BBC Health", url: "https://feeds.bbci.co.uk/news/health/rss.xml", lane: "health" },
   { name: "BBC Science", url: "https://feeds.bbci.co.uk/news/science_and_environment/rss.xml", lane: "science" },
   { name: "BBC Culture", url: "https://feeds.bbci.co.uk/news/entertainment_and_arts/rss.xml", lane: "culture" },
 ];
 
+const NAMED: Record<string, string> = {
+  amp: "&",
+  lt: "<",
+  gt: ">",
+  quot: '"',
+  apos: "'",
+  nbsp: " ",
+  rsquo: "\u2019",
+  lsquo: "\u2018",
+  rdquo: "\u201D",
+  ldquo: "\u201C",
+  mdash: "\u2014",
+  ndash: "\u2013",
+  hellip: "\u2026",
+  trade: "\u2122",
+  copy: "\u00A9",
+  reg: "\u00AE",
+};
+
+function fromCodePoint(code: number) {
+  try {
+    return String.fromCodePoint(code);
+  } catch {
+    return "";
+  }
+}
+
+/** Decode RSS junk like &#8217; / &rsquo; into real characters. */
 const clean = (value: string) =>
   value
     .replace(/<!\[CDATA\[|\]\]>/g, "")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
+    .replace(/&#x([0-9a-fA-F]+);/gi, (_, hex) => fromCodePoint(parseInt(hex, 16)))
+    .replace(/&#(\d+);/g, (_, num) => fromCodePoint(parseInt(num, 10)))
+    .replace(/&([a-z]+);/gi, (match, name: string) => NAMED[name.toLowerCase()] ?? match)
     .replace(/<[^>]+>/g, " ")
-    .replace(/&amp;/g, "&")
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;|&apos;/g, "'")
     .replace(/\s+/g, " ")
     .trim();
 
@@ -87,29 +113,84 @@ async function load(feed: Feed) {
 }
 
 const stop = new Set(
-  "the a an and or but into over after before says said this that with from have has will would could should their about latest story report reports amid more than what when where why how government official breaking live update news".split(
+  "the a an and or but into over after before says said this that with from have has will would could should their about latest story report reports amid more than what when where why how government official breaking live update news people world according officials today week years year state house press release reuters associated also just been were they them some many most such only other than into onto against during while since until still already another around because before between without within through under every those these being been research study studies scientists clinical disease hours found warns suggests comparable common".split(
     " ",
   ),
 );
 
-const tokens = (story: Story) =>
-  new Set(
-    `${story.title} ${story.description}`
-      .toLowerCase()
-      .replace(/[^a-z0-9 ]/g, " ")
-      .split(/\s+/)
-      .filter((word) => word.length > 3 && !stop.has(word)),
-  );
+const DAY_MS = 24 * 60 * 60 * 1000;
+const DATE_WINDOW_DAYS = 5;
+const SCORE_THRESHOLD = 52;
 
-function score(a: Story, b: Story) {
-  const aw = tokens(a);
-  const bw = tokens(b);
-  let shared = 0;
-  aw.forEach((word) => {
-    if (bw.has(word)) shared += word.length > 7 ? 2 : 1;
+function wordList(text: string) {
+  return text
+    .toLowerCase()
+    .replace(/[^a-z0-9 ]/g, " ")
+    .split(/\s+/)
+    .filter((word) => word.length > 3 && !stop.has(word));
+}
+
+const tokens = (text: string) => new Set(wordList(text));
+
+function parseStoryDate(value: string) {
+  if (!value) return null;
+  const time = Date.parse(value);
+  return Number.isFinite(time) ? time : null;
+}
+
+function withinDateWindow(a: Story, b: Story) {
+  const left = parseStoryDate(a.date);
+  const right = parseStoryDate(b.date);
+  if (left == null || right == null) return { ok: true, dated: false as const };
+  return { ok: Math.abs(left - right) <= DATE_WINDOW_DAYS * DAY_MS, dated: true as const };
+}
+
+function scorePair(a: Story, b: Story): { score: number; shared: string[]; ok: boolean } {
+  const titleA = tokens(a.title);
+  const titleB = tokens(b.title);
+  const descA = tokens(a.description);
+  const descB = tokens(b.description);
+  const allA = new Set([...titleA, ...descA]);
+  const allB = new Set([...titleB, ...descB]);
+
+  const sharedTitle: string[] = [];
+  titleA.forEach((word) => {
+    if (titleB.has(word)) sharedTitle.push(word);
   });
-  const lane = a.lane === b.lane ? 8 : 0;
-  return Math.min(99, Math.round(shared * 10 + lane));
+
+  const sharedAll: string[] = [];
+  allA.forEach((word) => {
+    if (allB.has(word)) sharedAll.push(word);
+  });
+
+  const hasLong = sharedAll.some((word) => word.length > 7);
+  const hasDigit = sharedAll.some((word) => /\d/.test(word));
+  const hasTitlePair = sharedTitle.length >= 2;
+  if (!hasLong && !hasDigit && !hasTitlePair) {
+    return { score: 0, shared: [], ok: false };
+  }
+
+  const dates = withinDateWindow(a, b);
+  if (!dates.ok) return { score: 0, shared: [], ok: false };
+
+  let sharedWeight = 0;
+  sharedAll.forEach((word) => {
+    const inTitle = titleA.has(word) && titleB.has(word);
+    const base = word.length > 7 ? 2 : 1;
+    sharedWeight += inTitle ? base * 2.5 : base;
+  });
+
+  const lane = dates.dated && a.lane === b.lane ? 8 : 0;
+  const score = Math.min(99, Math.round(sharedWeight * 10 + lane));
+
+  const ranked = [...sharedAll].sort((x, y) => {
+    const xt = sharedTitle.includes(x) ? 1 : 0;
+    const yt = sharedTitle.includes(y) ? 1 : 0;
+    if (yt !== xt) return yt - xt;
+    return y.length - x.length;
+  });
+
+  return { score, shared: ranked.slice(0, 3), ok: score >= SCORE_THRESHOLD };
 }
 
 /** Expensive: hits every RSS feed. Only call from the daily cron / cache miss. */
@@ -121,15 +202,23 @@ export async function computeMatches(): Promise<MatchPayload> {
   const left = leftGroups.flat();
   const right = rightGroups.flat();
   const candidates = left
-    .flatMap((story) => right.map((record) => ({ left: story, right: record, score: score(story, record) })))
-    .filter((pair) => pair.score >= 38)
+    .flatMap((story) =>
+      right.map((record) => {
+        const result = scorePair(story, record);
+        return { left: story, right: record, score: result.score, shared: result.shared, ok: result.ok };
+      }),
+    )
+    .filter((pair) => pair.ok)
     .sort((a, b) => b.score - a.score);
-  const used = new Set<string>();
-  const matches = [];
+
+  const usedLeft = new Set<string>();
+  const usedRight = new Set<string>();
+  const matches: MatchPayload["matches"] = [];
   for (const pair of candidates) {
-    if (used.has(pair.left.url)) continue;
-    used.add(pair.left.url);
-    matches.push(pair);
+    if (usedLeft.has(pair.left.url) || usedRight.has(pair.right.url)) continue;
+    usedLeft.add(pair.left.url);
+    usedRight.add(pair.right.url);
+    matches.push({ left: pair.left, right: pair.right, score: pair.score, shared: pair.shared });
     if (matches.length === 12) break;
   }
   return {
