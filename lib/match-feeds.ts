@@ -56,15 +56,41 @@ const recordFeeds: Feed[] = [
   { name: "BBC Culture", url: "https://feeds.bbci.co.uk/news/entertainment_and_arts/rss.xml", lane: "culture" },
 ];
 
+const NAMED: Record<string, string> = {
+  amp: "&",
+  lt: "<",
+  gt: ">",
+  quot: '"',
+  apos: "'",
+  nbsp: " ",
+  rsquo: "\u2019",
+  lsquo: "\u2018",
+  rdquo: "\u201D",
+  ldquo: "\u201C",
+  mdash: "\u2014",
+  ndash: "\u2013",
+  hellip: "\u2026",
+  trade: "\u2122",
+  copy: "\u00A9",
+  reg: "\u00AE",
+};
+
+function fromCodePoint(code: number) {
+  try {
+    return String.fromCodePoint(code);
+  } catch {
+    return "";
+  }
+}
+
+/** Decode RSS junk like &#8217; / &rsquo; into real characters. */
 const clean = (value: string) =>
   value
     .replace(/<!\[CDATA\[|\]\]>/g, "")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
+    .replace(/&#x([0-9a-fA-F]+);/gi, (_, hex) => fromCodePoint(parseInt(hex, 16)))
+    .replace(/&#(\d+);/g, (_, num) => fromCodePoint(parseInt(num, 10)))
+    .replace(/&([a-z]+);/gi, (match, name: string) => NAMED[name.toLowerCase()] ?? match)
     .replace(/<[^>]+>/g, " ")
-    .replace(/&amp;/g, "&")
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;|&apos;/g, "'")
     .replace(/\s+/g, " ")
     .trim();
 

@@ -1,6 +1,6 @@
 "use client";
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type MouseEvent } from "react";
 import { cases } from "./cases";
 import { topics } from "./archive/topics";
 import { SiteFooter } from "./components/SiteFooter";
@@ -58,6 +58,24 @@ export default function Home() {
     };
   }, [range]);
 
+  // Arriving from another page via /#matcher: scroll once, then strip the hash.
+  // A fragment left in the URL makes mobile Safari re-snap to the anchor every
+  // time async results change the page height, hijacking user scrolling.
+  useEffect(() => {
+    if (window.location.hash !== "#matcher") return;
+    const timer = setTimeout(() => {
+      document.getElementById("matcher")?.scrollIntoView({ block: "start" });
+      history.replaceState(null, "", window.location.pathname + window.location.search);
+    }, 120);
+    return () => clearTimeout(timer);
+  }, []);
+
+  function goToMatcher(event: MouseEvent<HTMLAnchorElement>) {
+    event.preventDefault();
+    document.getElementById("matcher")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    history.replaceState(null, "", window.location.pathname + window.location.search);
+  }
+
   const updatedLabel = data?.updatedAt
     ? new Date(data.updatedAt).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })
     : null;
@@ -72,7 +90,7 @@ export default function Home() {
         : "Building history…";
 
   return <main id="content">
-    <nav className="site-nav"><Link className="logo" href="/"><b>D/A</b><span>DEEP IN THE ABYSS<small>They say · the record says</small></span></Link><div><a href="#matcher">Latest matches</a><Link href="/archive">Archive</Link><ThemeToggle /></div></nav>
+    <nav className="site-nav"><Link className="logo" href="/"><b>D/A</b><span>DEEP IN THE ABYSS<small>They say · the record says</small></span></Link><div><a href="#matcher" onClick={goToMatcher}>Latest matches</a><Link href="/archive">Archive</Link><ThemeToggle /></div></nav>
 
     <header className="tool-hero">
       <p className="label">One simple idea</p>
