@@ -71,7 +71,7 @@ export default function Home() {
         ? `From ${data.snapshotCount} daily snapshot${data.snapshotCount === 1 ? "" : "s"}`
         : "Building history…";
 
-  return <main>
+  return <main id="content">
     <nav className="site-nav"><Link className="logo" href="/"><b>D/A</b><span>DEEP IN THE ABYSS<small>They say · the record says</small></span></Link><div><a href="#matcher">Latest matches</a><Link href="/archive">Archive</Link><ThemeToggle /></div></nav>
 
     <header className="tool-hero">

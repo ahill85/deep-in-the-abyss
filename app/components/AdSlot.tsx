@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { Component, useEffect, useRef, type ReactNode } from "react";
 
 declare global {
   interface Window {
@@ -15,8 +15,19 @@ type Props = {
   placement?: "mid" | "bottom";
 };
 
-/** Shared AdSense unit (same ca-pub / slot as other Astar Media apps). */
-export function AdSlot({ placement = "bottom" }: Props) {
+/** Keeps a blocked/broken ad from taking down the page (Brave Shields, etc.). */
+class AdErrorBoundary extends Component<{ children: ReactNode }, { failed: boolean }> {
+  state = { failed: false };
+  static getDerivedStateFromError() {
+    return { failed: true };
+  }
+  render() {
+    if (this.state.failed) return null;
+    return this.props.children;
+  }
+}
+
+function AdSlotInner({ placement = "bottom" }: Props) {
   const slotRef = useRef<HTMLDivElement>(null);
   const pushed = useRef(false);
 
@@ -25,6 +36,17 @@ export function AdSlot({ placement = "bottom" }: Props) {
     if (!slot) return;
     const ins = slot.querySelector<HTMLElement>(".adsbygoogle");
     if (!ins) return;
+
+    // If Brave/adblock removed or blocked the loader, hide the slot and stop.
+    if (typeof window.adsbygoogle === "undefined") {
+      const timer = window.setTimeout(() => {
+        if (typeof window.adsbygoogle === "undefined") {
+          slot.classList.add("is-empty");
+          slot.setAttribute("aria-hidden", "true");
+        }
+      }, 2500);
+      return () => window.clearTimeout(timer);
+    }
 
     const already =
       pushed.current ||
@@ -36,7 +58,9 @@ export function AdSlot({ placement = "bottom" }: Props) {
         (window.adsbygoogle = window.adsbygoogle || []).push({});
         pushed.current = true;
       } catch {
-        // AdSense blocked / not loaded yet
+        slot.classList.add("is-empty");
+        slot.setAttribute("aria-hidden", "true");
+        return;
       }
     }
 
@@ -70,5 +94,14 @@ export function AdSlot({ placement = "bottom" }: Props) {
         data-full-width-responsive="true"
       />
     </div>
+  );
+}
+
+/** Shared AdSense unit (same ca-pub / slot as other Astar Media apps). */
+export function AdSlot(props: Props) {
+  return (
+    <AdErrorBoundary>
+      <AdSlotInner {...props} />
+    </AdErrorBoundary>
   );
 }

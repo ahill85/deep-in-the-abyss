@@ -51,7 +51,7 @@ export default async function CasePage({ params }: { params: Promise<{ slug: str
     image: absoluteUrl("/og-1200.png"),
     articleSection: item.category,
   };
-  return <main className="case-page">
+  return <main id="content" className="case-page">
     <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(articleLd) }} />
     <nav className="site-nav"><Link className="logo" href="/"><b>D/A</b><span>DEEP IN THE ABYSS<small>They say · the record says</small></span></Link><div><Link href="/archive">All cases</Link><Link href="/#matcher">Live matches</Link><ThemeToggle /></div></nav>
 

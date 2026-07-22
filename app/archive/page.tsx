@@ -26,7 +26,7 @@ export const metadata: Metadata = {
 };
 
 export default function Archive() {
-  return <main>
+  return <main id="content">
     <nav className="site-nav"><Link className="logo" href="/"><b>D/A</b><span>DEEP IN THE ABYSS<small>They say · the record says</small></span></Link><div><Link href="/">Live matches</Link><ThemeToggle /></div></nav>
     <header className="archive-hero">
       <p className="label">The archive</p>

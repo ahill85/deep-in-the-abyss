@@ -48,7 +48,7 @@ export default async function TopicPage({ params }: { params: Promise<{ slug: st
     publisher: { "@type": "Organization", name: "Astar Media", url: "https://astarmedia.net" },
     mainEntityOfPage: absoluteUrl(`/archive/${slug}`), image: absoluteUrl("/og-1200.png"), articleSection: topic.category,
   };
-  return <main className="case-page">
+  return <main id="content" className="case-page">
     <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(articleLd) }} />
     <nav className="site-nav"><Link className="logo" href="/"><b>D/A</b><span>DEEP IN THE ABYSS<small>They say · the record says</small></span></Link><div><Link href="/archive">All subjects</Link><Link href="/#matcher">Live matches</Link><ThemeToggle /></div></nav>
 
