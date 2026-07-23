@@ -85,10 +85,15 @@ async function writeKv(data: MatchPayload) {
     const kv = (env as MatchesEnv).MATCHES_CACHE;
     if (!kv) return;
     const day = utcDay(data.updatedAt);
-    await Promise.all([
-      kv.put(KV_KEY, JSON.stringify(data), { expirationTtl: MATCH_CACHE_TTL_SECONDS }),
-      kv.put(archiveKey(day), JSON.stringify(data), { expirationTtl: ARCHIVE_TTL_SECONDS }),
-    ]);
+    const today = new Date().toISOString().slice(0, 10);
+
+    // Always refresh the live "today" cache.
+    await kv.put(KV_KEY, JSON.stringify(data), { expirationTtl: MATCH_CACHE_TTL_SECONDS });
+
+    // Only snapshot the current UTC day. Past `daily-matches-YYYY-MM-DD` keys are
+    // never written here, so week/month history stays intact across deploys.
+    if (day !== today) return;
+    await kv.put(archiveKey(day), JSON.stringify(data), { expirationTtl: ARCHIVE_TTL_SECONDS });
   } catch {
     // ignore
   }

@@ -38,9 +38,12 @@ const recordFeeds: Feed[] = [
   { name: "ScienceDaily", url: "https://www.sciencedaily.com/rss/all.xml", lane: "science" },
   { name: "Smithsonian Magazine", url: "https://www.smithsonianmag.com/rss/latest_articles/", lane: "culture" },
   { name: "BBC World", url: "https://feeds.bbci.co.uk/news/world/rss.xml", lane: "general" },
+  { name: "BBC Politics", url: "https://feeds.bbci.co.uk/news/politics/rss.xml", lane: "government" },
   { name: "BBC Health", url: "https://feeds.bbci.co.uk/news/health/rss.xml", lane: "health" },
   { name: "BBC Science", url: "https://feeds.bbci.co.uk/news/science_and_environment/rss.xml", lane: "science" },
   { name: "BBC Culture", url: "https://feeds.bbci.co.uk/news/entertainment_and_arts/rss.xml", lane: "culture" },
+  { name: "The Guardian", url: "https://www.theguardian.com/world/rss", lane: "general" },
+  { name: "NPR News", url: "https://feeds.npr.org/1001/rss.xml", lane: "general" },
 ];
 
 const NAMED: Record<string, string> = {
@@ -113,24 +116,118 @@ async function load(feed: Feed) {
 }
 
 const stop = new Set(
-  "the a an and or but into over after before says said this that with from have has will would could should their about latest story report reports amid more than what when where why how government official breaking live update news people world according officials today week years year state house press release reuters associated also just been were they them some many most such only other than into onto against during while since until still already another around because before between without within through under every those these being been research study studies scientists clinical disease hours found warns suggests comparable common".split(
+  "the a an and or but into over after before says said this that with from have has will would could should their about latest story report reports amid more than what when where why how government official breaking live update news people world according officials today week years year state house press release reuters associated also just been were they them some many most such only other than onto against during while since until still already another around because between without within through under every those these being research study studies scientists clinical disease hours found warns suggests comparable common something somehow someone everyone everything anything nothing new old big war air cut put got can one two".split(
     " ",
   ),
 );
 
 const DAY_MS = 24 * 60 * 60 * 1000;
-const DATE_WINDOW_DAYS = 5;
-const SCORE_THRESHOLD = 52;
+/** Soft proximity bonus if both dated within this many days. Never a hard reject. */
+const DATE_CLOSE_DAYS = 7;
+/** Mild penalty only if both dated and farther apart than this (still eligible). */
+const DATE_FAR_DAYS = 30;
+const SCORE_THRESHOLD_STRONG = 42;
+const SCORE_THRESHOLD_FILL = 38;
+const BIGRAM_BONUS = 28;
+const MAX_MATCHES = 12;
+/** Prefer at least this many cards when weaker-but-plausible pairs exist. */
+const FILL_TARGET = 8;
+
+/** Too generic to count as a useful title/description anchor alone. */
+const weakAlone = new Set(
+  (
+    "payments payment guidance evidence military threat market markets policy funds shares " +
+    "china russia israel ukraine federal national american california government treatment " +
+    "computer security revealing forgotten hollywood heatwaves pentagon haunt ghosts christmas " +
+    "approach proposal boosting financial powerful education disturbing mysterious director " +
+    "asteroid plane transparency documentary formation impossible citing hidden change health " +
+    "source getting america nuclear data billion digital largest finally mission science " +
+    "therapy chronic strange space earth water world years people public system systems " +
+    "project plans plan report reports study studies research release announces announce " +
+    "first month weeks week daily night young women children vaccine virus infection " +
+    "disease diseases medical hospital patient patients global local major small large " +
+    "open closed secret secrets silent radio currency agenda collapse verge ancient " +
+    "mystery lakes rainy create injury table compensated little dots beginning explanation " +
+    "thanks performance robotic servicing launches support strategies halt muscle natural " +
+    "backed body centered trauma gene sickle approved approves processed foods risks " +
+    "fueling crackdown ultra occult meaning film colourful perform half time show country " +
+    "alien dining disclosure flying cars news lights abductions close encounters forgotten " +
+    "waves quantum effect dramatically boosts energy transfer missile tracking satellites " +
+    "orders force medicaid pausing central bankers going gone " +
+    "claims claim alleged allegedly flawed parts story still missing " +
+    "afford french great court might based pilot minister president " +
+    "brain memory singer function improves watching shrink midlife " +
+    "leave including agency democratic voters proposed developing minutes " +
+    "money increase administration cheap waste value inside times defense " +
+    "early number solar storms signal predict reading mapping stars " +
+    "scholars beliefs vikings based medieval fiction watching reality"
+  ).split(/\s+/).filter(Boolean),
+);
+
+/** Shared proper phrases that are too broad to count as a same-event name hit. */
+const weakPhrases = new Set([
+  "trump administration",
+  "white house",
+  "united states",
+  "new york",
+  "supreme court",
+  "federal reserve",
+]);
+
+function isWeakPhrase(phrase: string) {
+  if (weakPhrases.has(phrase)) return true;
+  for (const weak of weakPhrases) {
+    if (phrase.includes(weak)) return true;
+  }
+  return false;
+}
+
+const shortKeep = new Set(["rfk", "fbi", "cia", "nsa", "ufo", "dhs", "cdc", "doj", "sec", "nih", "fda", "epa"]);
+/** Frequent political names — alone they are not a same-event match. */
+const commonActors = new Set(["trump", "biden", "putin", "harris", "obama", "netanyahu", "zelensky"]);
 
 function wordList(text: string) {
   return text
     .toLowerCase()
+    .replace(/(\d),(\d)/g, "$1$2")
     .replace(/[^a-z0-9 ]/g, " ")
     .split(/\s+/)
-    .filter((word) => word.length > 3 && !stop.has(word));
+    .filter((word) => {
+      if (!word || stop.has(word)) return false;
+      if (/\d/.test(word)) return word.length >= 2;
+      if (word.length > 3) return true;
+      return shortKeep.has(word);
+    });
 }
 
-const tokens = (text: string) => new Set(wordList(text));
+function entities(words: string[]) {
+  return words.filter((word) => word.length >= 5 || /\d/.test(word));
+}
+
+/** Multi-word capitalized runs + digit-y tokens (D4vd) — headline Title Case alone is too noisy. */
+function properPhrases(title: string) {
+  const phrases: string[] = [];
+  const re = /\b([A-Z][A-Za-z0-9''-]{1,}(?:\s+[A-Z][A-Za-z0-9''-]{2,})+)\b/g;
+  let match: RegExpExecArray | null;
+  while ((match = re.exec(title))) {
+    const phrase = match[1].toLowerCase().replace(/['']/g, "");
+    const first = phrase.split(/\s+/)[0] ?? "";
+    if (!stop.has(first) && !weakAlone.has(first)) phrases.push(phrase);
+  }
+  for (const token of title.match(/\b[A-Za-z]*\d[A-Za-z0-9]*\b/g) ?? []) {
+    const lower = token.toLowerCase();
+    if (lower.length >= 3 && !/^(19|20)\d{2}$/.test(lower)) phrases.push(lower);
+  }
+  return phrases;
+}
+
+function bigrams(words: string[]) {
+  const out: string[] = [];
+  for (let i = 0; i < words.length - 1; i++) {
+    out.push(`${words[i]} ${words[i + 1]}`);
+  }
+  return out;
+}
 
 function parseStoryDate(value: string) {
   if (!value) return null;
@@ -138,59 +235,186 @@ function parseStoryDate(value: string) {
   return Number.isFinite(time) ? time : null;
 }
 
-function withinDateWindow(a: Story, b: Story) {
+/** Soft date signal only — never discards a pair (keeps week/month history usable). */
+function dateSoftScore(a: Story, b: Story) {
   const left = parseStoryDate(a.date);
   const right = parseStoryDate(b.date);
-  if (left == null || right == null) return { ok: true, dated: false as const };
-  return { ok: Math.abs(left - right) <= DATE_WINDOW_DAYS * DAY_MS, dated: true as const };
+  if (left == null || right == null) return { bonus: 0, dated: false as const };
+  const days = Math.abs(left - right) / DAY_MS;
+  if (days <= DATE_CLOSE_DAYS) return { bonus: 8, dated: true as const };
+  if (days > DATE_FAR_DAYS) return { bonus: -4, dated: true as const };
+  return { bonus: 0, dated: true as const };
 }
 
-function scorePair(a: Story, b: Story): { score: number; shared: string[]; ok: boolean } {
-  const titleA = tokens(a.title);
-  const titleB = tokens(b.title);
-  const descA = tokens(a.description);
-  const descB = tokens(b.description);
-  const allA = new Set([...titleA, ...descA]);
-  const allB = new Set([...titleB, ...descB]);
+function buildIdf(stories: Story[]) {
+  const df = new Map<string, number>();
+  for (const story of stories) {
+    const unique = new Set(wordList(`${story.title} ${story.description}`));
+    unique.forEach((word) => df.set(word, (df.get(word) ?? 0) + 1));
+  }
+  const n = Math.max(stories.length, 1);
+  const idf = new Map<string, number>();
+  df.forEach((count, word) => {
+    idf.set(word, Math.log(1 + n / (1 + count)));
+  });
+  return idf;
+}
+
+function idfWeight(word: string, idf: Map<string, number>) {
+  return idf.get(word) ?? 1;
+}
+
+type PairScore = { score: number; shared: string[]; tier: "strong" | "fill" | "reject" };
+
+function scorePair(a: Story, b: Story, idf: Map<string, number>): PairScore {
+  const titleWordsA = wordList(a.title);
+  const titleWordsB = wordList(b.title);
+  const titleA = new Set(titleWordsA);
+  const titleB = new Set(titleWordsB);
+  const entA = new Set(entities(titleWordsA));
+  const entB = new Set(entities(titleWordsB));
+  const bigA = new Set(bigrams(titleWordsA));
+  const bigB = new Set(bigrams(titleWordsB));
+  const descA = new Set(wordList(a.description));
+  const descB = new Set(wordList(b.description));
 
   const sharedTitle: string[] = [];
   titleA.forEach((word) => {
     if (titleB.has(word)) sharedTitle.push(word);
   });
 
-  const sharedAll: string[] = [];
-  allA.forEach((word) => {
-    if (allB.has(word)) sharedAll.push(word);
+  const sharedEntities: string[] = [];
+  entA.forEach((word) => {
+    if (entB.has(word)) sharedEntities.push(word);
   });
 
-  const hasLong = sharedAll.some((word) => word.length > 7);
-  const hasDigit = sharedAll.some((word) => /\d/.test(word));
-  const hasTitlePair = sharedTitle.length >= 2;
-  if (!hasLong && !hasDigit && !hasTitlePair) {
-    return { score: 0, shared: [], ok: false };
+  const sharedBigrams: string[] = [];
+  bigA.forEach((phrase) => {
+    if (!bigB.has(phrase) || isWeakPhrase(phrase)) return;
+    const [leftWord, rightWord] = phrase.split(" ");
+    if (!leftWord || !rightWord) return;
+    if (weakAlone.has(leftWord) || weakAlone.has(rightWord)) return;
+    if (leftWord.length < 4 || rightWord.length < 4) return;
+    sharedBigrams.push(phrase);
+  });
+
+  const propsA = new Set(properPhrases(a.title));
+  const propsB = new Set(properPhrases(b.title));
+  const sharedProper: string[] = [];
+  propsA.forEach((phrase) => {
+    if (propsB.has(phrase) && !isWeakPhrase(phrase)) sharedProper.push(phrase);
+  });
+
+  const usefulTitle = sharedTitle.filter((word) => !weakAlone.has(word) && !/^(19|20)\d{2}$/.test(word));
+  const specificTitle = usefulTitle.filter((word) => !commonActors.has(word));
+  const sharedDescUseful: string[] = [];
+  descA.forEach((word) => {
+    if (!descB.has(word) || titleA.has(word) || titleB.has(word) || weakAlone.has(word)) return;
+    if (word.length < 5) return;
+    sharedDescUseful.push(word);
+  });
+
+  // Paraphrase path: same story often shares several uncommon tokens across title+blurb
+  // even when headlines don't line up word-for-word.
+  const bagA = new Set(
+    [...titleWordsA, ...wordList(a.description)].filter(
+      (word) =>
+        !weakAlone.has(word) &&
+        !/^(19|20)\d{2}$/.test(word) &&
+        (word.length >= 5 || /\d/.test(word) || shortKeep.has(word)),
+    ),
+  );
+  const bagB = new Set(
+    [...titleWordsB, ...wordList(b.description)].filter(
+      (word) =>
+        !weakAlone.has(word) &&
+        !/^(19|20)\d{2}$/.test(word) &&
+        (word.length >= 5 || /\d/.test(word) || shortKeep.has(word)),
+    ),
+  );
+  const sharedBag: string[] = [];
+  bagA.forEach((word) => {
+    if (bagB.has(word) && idfWeight(word, idf) >= 2.05) sharedBag.push(word);
+  });
+  const bagInBothTitles = sharedBag.filter((word) => titleA.has(word) && titleB.has(word));
+  const richOverlap =
+    (sharedBag.length >= 3 && bagInBothTitles.length >= 1) ||
+    (sharedBag.length >= 2 &&
+      sharedBag.some(
+        (word) =>
+          (word.length >= 8 || (/\d/.test(word) && word.length >= 3) || shortKeep.has(word)) &&
+          bagInBothTitles.includes(word),
+      ));
+
+  const sharedDigit = sharedEntities.some((word) => {
+    if (!/\d/.test(word) || /^(19|20)\d{2}$/.test(word)) return false;
+    if (word.length < 3 || /^0+$/.test(word)) return false;
+    return true;
+  });
+  const twoAnchors =
+    specificTitle.filter((word) => word.length >= 5 && idfWeight(word, idf) >= 2.15).length >= 2;
+  const titlePlusDesc =
+    specificTitle.some((word) => word.length >= 5 && idfWeight(word, idf) >= 2.0) &&
+    sharedDescUseful.length >= 1;
+  const namedHit = sharedProper.some(
+    (phrase) => phrase.length >= 4 && !weakAlone.has(phrase) && !isWeakPhrase(phrase),
+  );
+  const laneAnchor =
+    a.lane === b.lane &&
+    specificTitle.some((word) => (word.length >= 6 || shortKeep.has(word)) && idfWeight(word, idf) >= 2.35);
+  const rareTitle =
+    specificTitle.some((word) => word.length >= 6 && idfWeight(word, idf) >= 2.65) &&
+    sharedDescUseful.length >= 1;
+
+  const digitSupport = specificTitle.some((word) => !/^\d+$/.test(word));
+  const strongGate =
+    sharedBigrams.length > 0 ||
+    twoAnchors ||
+    namedHit ||
+    richOverlap ||
+    (sharedDigit && digitSupport);
+  const fillGate = twoAnchors || titlePlusDesc || namedHit || richOverlap || laneAnchor || rareTitle;
+  if (!strongGate && !fillGate) return { score: 0, shared: [], tier: "reject" };
+
+  let weight = 0;
+  usefulTitle.forEach((word) => {
+    const rarity = Math.min(idfWeight(word, idf), 3.2);
+    weight += rarity * (word.length > 7 ? 2.6 : word.length >= 5 ? 1.8 : 1.1);
+  });
+  sharedProper.forEach((phrase) => {
+    const parts = phrase.split(/\s+/);
+    weight += parts.length > 1 ? 4.2 : 2.8;
+  });
+  if (usefulTitle.length === 1 && sharedBigrams.length === 0 && !sharedDigit && !namedHit) {
+    weight *= 0.55;
+  }
+  weight += sharedBigrams.length * (BIGRAM_BONUS / 10);
+  if (richOverlap) {
+    weight += Math.min(sharedBag.length, 5) * 0.85;
   }
 
-  const dates = withinDateWindow(a, b);
-  if (!dates.ok) return { score: 0, shared: [], ok: false };
-
-  let sharedWeight = 0;
-  sharedAll.forEach((word) => {
-    const inTitle = titleA.has(word) && titleB.has(word);
-    const base = word.length > 7 ? 2 : 1;
-    sharedWeight += inTitle ? base * 2.5 : base;
+  let descWeight = 0;
+  sharedDescUseful.forEach((word) => {
+    descWeight += Math.min(idfWeight(word, idf), 2.5) * 0.45;
   });
+  weight += Math.min(descWeight, 4.5);
 
-  const lane = dates.dated && a.lane === b.lane ? 8 : 0;
-  const score = Math.min(99, Math.round(sharedWeight * 10 + lane));
+  const dates = dateSoftScore(a, b);
+  const lane = a.lane === b.lane ? (dates.dated ? 8 : 4) : 0;
+  const score = Math.min(99, Math.round(weight * 8 + dates.bonus + lane));
 
-  const ranked = [...sharedAll].sort((x, y) => {
-    const xt = sharedTitle.includes(x) ? 1 : 0;
-    const yt = sharedTitle.includes(y) ? 1 : 0;
-    if (yt !== xt) return yt - xt;
-    return y.length - x.length;
-  });
+  const labels = [
+    ...sharedProper,
+    ...sharedBigrams,
+    ...usefulTitle.sort((x, y) => y.length - x.length || idfWeight(y, idf) - idfWeight(x, idf)),
+    ...sharedBag.sort((x, y) => y.length - x.length || idfWeight(y, idf) - idfWeight(x, idf)),
+    ...sharedDescUseful.sort((x, y) => y.length - x.length).slice(0, 1),
+  ];
+  const shared = [...new Set(labels)].slice(0, 3);
 
-  return { score, shared: ranked.slice(0, 3), ok: score >= SCORE_THRESHOLD };
+  if (strongGate && score >= SCORE_THRESHOLD_STRONG) return { score, shared, tier: "strong" };
+  if ((strongGate || fillGate) && score >= SCORE_THRESHOLD_FILL) return { score, shared, tier: "fill" };
+  return { score, shared, tier: "reject" };
 }
 
 /** Expensive: hits every RSS feed. Only call from the daily cron / cache miss. */
@@ -201,26 +425,39 @@ export async function computeMatches(): Promise<MatchPayload> {
   ]);
   const left = leftGroups.flat();
   const right = rightGroups.flat();
-  const candidates = left
+  const idf = buildIdf([...left, ...right]);
+
+  const scored = left
     .flatMap((story) =>
       right.map((record) => {
-        const result = scorePair(story, record);
-        return { left: story, right: record, score: result.score, shared: result.shared, ok: result.ok };
+        const result = scorePair(story, record, idf);
+        return { left: story, right: record, score: result.score, shared: result.shared, tier: result.tier };
       }),
     )
-    .filter((pair) => pair.ok)
-    .sort((a, b) => b.score - a.score);
+    .filter((pair) => pair.tier !== "reject")
+    .sort((a, b) => {
+      if (a.tier !== b.tier) return a.tier === "strong" ? -1 : 1;
+      return b.score - a.score;
+    });
 
   const usedLeft = new Set<string>();
   const usedRight = new Set<string>();
   const matches: MatchPayload["matches"] = [];
-  for (const pair of candidates) {
-    if (usedLeft.has(pair.left.url) || usedRight.has(pair.right.url)) continue;
-    usedLeft.add(pair.left.url);
-    usedRight.add(pair.right.url);
-    matches.push({ left: pair.left, right: pair.right, score: pair.score, shared: pair.shared });
-    if (matches.length === 12) break;
-  }
+
+  const take = (tier: "strong" | "fill", limit: number) => {
+    for (const pair of scored) {
+      if (pair.tier !== tier) continue;
+      if (usedLeft.has(pair.left.url) || usedRight.has(pair.right.url)) continue;
+      usedLeft.add(pair.left.url);
+      usedRight.add(pair.right.url);
+      matches.push({ left: pair.left, right: pair.right, score: pair.score, shared: pair.shared });
+      if (matches.length >= limit) break;
+    }
+  };
+
+  take("strong", MAX_MATCHES);
+  if (matches.length < FILL_TARGET) take("fill", MAX_MATCHES);
+
   return {
     updatedAt: new Date().toISOString(),
     alternativeSources: alternativeFeeds.length,
@@ -234,4 +471,3 @@ export const MATCH_CACHE_PATH = "/deep-in-the-abyss/api/matches";
 export const MATCH_CACHE_TTL_SECONDS = 60 * 60 * 24;
 /** Shared with the Worker cron — not a user-facing secret. */
 export const MATCH_REFRESH_SECRET = "dia-daily-refresh-v1";
-
